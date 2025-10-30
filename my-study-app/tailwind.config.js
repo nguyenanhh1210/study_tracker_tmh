@@ -1,4 +1,6 @@
 /** @type {import('tailwindcss').Config} */
+import typography from '@tailwindcss/typography'; // <-- DÒNG MỚI
+
 export default {
   // Dòng "content" này là quan trọng nhất.
   // Nó ra lệnh cho Tailwind "quét" tất cả các file jsx/tsx trong thư mục src
@@ -21,5 +23,8 @@ export default {
       },
     },
   },
-  plugins: [],
+  // CẬP NHẬT: Thêm plugin "typography" (cho Ghi chú)
+  plugins: [
+    typography, // <-- DÒNG MỚI
+  ],
 }

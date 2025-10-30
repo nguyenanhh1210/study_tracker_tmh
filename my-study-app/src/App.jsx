@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { initializeApp } from 'firebase/app';
 import {
   getAuth,
@@ -20,7 +20,10 @@ import {
   onSnapshot,
   increment,
   writeBatch,
-  getDocs
+  getDocs,
+  Timestamp,
+  orderBy,
+  deleteDoc
 } from 'firebase/firestore';
 import {
   BarChart,
@@ -32,6 +35,7 @@ import {
   Legend,
   ResponsiveContainer
 } from 'recharts';
+// CẬP NHẬT: Đã chuyển sang dùng lucide-react (giống project của bạn)
 import {
   CheckCircle,
   Circle,
@@ -48,11 +52,20 @@ import {
   LogIn,
   Archive,
   Eye,
-  EyeOff
+  EyeOff,
+  Edit2, // Icon Sửa
+  Save,  // Icon Lưu
+  Trash2, // Icon Xóa
+  Clock, // Icon Đồng hồ
+  Play,  // Icon Bắt đầu
+  Square, // Icon Dừng
+  StickyNote, // Icon Ghi chú
+  Send, // Icon Gửi
+  Bell // Icon Chuông
 } from 'lucide-react';
 
 // --- CẤU HÌNH FIREBASE ---
-// HÃY DÁN firebaseConfig "THẬT" CỦA BẠN VÀO ĐÂY
+// (Đây là config bạn đã cung cấp)
 const firebaseConfig = {
   apiKey: "AIzaSyBuSPwtyntSMlT3NwWXn3Ws2OOKZR8j79A",
   authDomain: "database-of-tmh.firebaseapp.com",
@@ -68,12 +81,13 @@ const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
 
-// Đường dẫn Firestore (Vẫn như cũ)
+// CẬP NHẬT: Thêm collection path cho 'notes'
 const usersPath = 'users';
 const publicCodesPath = 'publicCodes';
 const goalsPath = 'goals';
-const goalTodosPath = 'goalTodos';
+const goalTodosPath = 'goalTodos'; // Đổi tên từ goalTodos sang subTasks cho rõ
 const studyLogsPath = 'studyLogs';
+const notesPath = 'notes'; // Collection mới cho Ghi chú
 
 // --- Helper Functions ---
 
@@ -91,14 +105,46 @@ const generateUniqueCode = async () => {
   return code;
 };
 
+// Lấy ngày hôm nay theo format YYYY-MM-DD
 const getISODate = (date = new Date()) => {
   return date.toISOString().split('T')[0];
 };
 
-// --- React Components (Đã đổi sang Tiếng Anh) ---
+// CẬP NHẬT: Hàm đếm ngược ngày (MỚI)
+const calculateDaysLeft = (targetDate) => {
+  if (!targetDate) return { days: 0, status: 'nodate' };
+  const today = new Date();
+  const target = new Date(targetDate);
+  
+  // Set today và target về 00:00:00 để so sánh ngày
+  today.setHours(0, 0, 0, 0);
+  target.setHours(0, 0, 0, 0);
+
+  const diffTime = target.getTime() - today.getTime();
+  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+  if (diffDays < 0) return { days: Math.abs(diffDays), status: 'overdue' };
+  if (diffDays === 0) return { days: 0, status: 'today' };
+  if (diffDays <= 7) return { days: diffDays, status: 'urgent' };
+  return { days: diffDays, status: 'normal' };
+};
+
+// CẬP NHẬT: Hàm format thời gian cho đồng hồ (MỚI)
+const formatStopwatchTime = (timeInSeconds) => {
+  const hours = Math.floor(timeInSeconds / 3600);
+  const minutes = Math.floor((timeInSeconds % 3600) / 60);
+  const seconds = timeInSeconds % 60;
+  
+  const pad = (num) => num.toString().padStart(2, '0');
+  
+  return `${pad(hours)}:${pad(minutes)}:${pad(seconds)}`;
+};
+
+
+// --- React Components ---
 
 /**
- * Login Screen
+ * Login Screen (Như cũ)
  */
 function LoginScreen() {
   const [isLoading, setIsLoading] = useState(false);
@@ -136,12 +182,7 @@ function LoginScreen() {
           {isLoading ? (
             <Loader2 className="animate-spin mr-2" />
           ) : (
-            <svg className="w-6 h-6 mr-3" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48">
-              <path fill="#FFC107" d="M43.6 20.1H42V20H24v8h11.3c-1.6 5.2-6.4 9-11.3 9-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.2 7.8 3.1l6.1-6.1C34 4.5 29.3 2 24 2 11.8 2 2 11.8 2 24s9.8 22 22 22 22-9.8 22-22c0-1.3-.2-2.7-.5-4z" />
-              <path fill="#FF3D00" d="M6.3 14.7l6.1 6.1C14.8 14.8 19.1 12 24 12c3.1 0 5.8 1.2 7.8 3.1l6.1-6.1C34 4.5 29.3 2 24 2 16.9 2 10.8 5.8 6.3 10.3z" />
-              <path fill="#4CAF50" d="M24 46c5.3 0 10-1.8 13.5-4.8l-6.1-6.1c-2 1.9-4.7 3-7.4 3-4.9 0-9.2-3.8-10.9-8.7l-6.1 6.1C10.8 40.2 16.9 46 24 46z" />
-              <path fill="#1976D2" d="M43.6 20.1H42V20H24v8h11.3c-.8 2.3-2.2 4.3-4.1 5.8l6.1 6.1C40.6 36.6 44 30.6 44 24c0-1.3-.2-2.7-.5-4z" />
-            </svg>
+            <LogIn className="w-6 h-6 mr-3" />
           )}
           {isLoading ? 'Signing in...' : 'Sign in with Google'}
         </button>
@@ -152,7 +193,7 @@ function LoginScreen() {
 }
 
 /**
- * Signup Modal
+ * Signup Modal (Như cũ)
  */
 function SignupModal({ userAuth, onSignupSuccess }) {
   const [name, setName] = useState(() => userAuth.displayName || '');
@@ -235,36 +276,249 @@ function SignupModal({ userAuth, onSignupSuccess }) {
   );
 }
 
+// CẬP NHẬT: Component đếm ngược ngày (MỚI)
+function CountdownTimer({ targetDate }) {
+  const { days, status } = calculateDaysLeft(targetDate);
+  
+  let text = '';
+  let colorClass = '';
+
+  switch (status) {
+    case 'overdue':
+      text = `Overdue by ${days} day(s)`;
+      colorClass = 'bg-red-600 text-white';
+      break;
+    case 'today':
+      text = 'Due Today!';
+      colorClass = 'bg-red-500 text-white animate-pulse';
+      break;
+    case 'urgent':
+      text = `${days} day(s) left!`;
+      colorClass = 'bg-yellow-400 text-yellow-900';
+      break;
+    case 'normal':
+      text = `${days} days left`;
+      colorClass = 'bg-green-100 text-green-700';
+      break;
+    default:
+      text = 'No date set';
+      colorClass = 'bg-gray-200 text-gray-500';
+  }
+
+  return (
+    <div className={`text-sm font-bold px-3 py-1 rounded-full inline-block ${colorClass}`}>
+      <Bell size={14} className="inline-block mr-1.5" />
+      {text}
+    </div>
+  );
+}
+
+// CẬP NHẬT: Component Modal Ghi chú Hoàn thành Goal (MỚI)
+function GoalCompletionModal({ goal, userId, onClose, onConfirm }) {
+  const [reflection, setReflection] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+
+  const handleSubmit = async () => {
+    if (!reflection.trim()) return; // Ghi chú là bắt buộc
+    
+    setIsLoading(true);
+    try {
+      const goalRef = doc(db, usersPath, userId, goalsPath, goal.id);
+      await updateDoc(goalRef, {
+        completed: true,
+        reflection: reflection.trim(),
+        completedAt: Timestamp.now(),
+      });
+      
+      // Cộng 100 điểm
+      onConfirm(100); 
+
+    } catch (error) {
+      console.error("Error completing goal: ", error);
+    } finally {
+      setIsLoading(false);
+      onClose();
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 p-4 font-quicksand">
+      <div className="bg-white p-6 rounded-lg shadow-2xl w-full max-w-lg">
+        <div className="flex justify-between items-center mb-4">
+          <h2 className="text-xl font-bold text-gray-800">Complete Goal</h2>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-700">
+            <X size={24} />
+          </button>
+        </div>
+        <p className="text-gray-700 mb-2">
+          Congratulations on finishing: <strong>{goal.title}</strong>!
+        </p>
+        <p className="text-gray-600 text-sm mb-4">
+          (This will award you <strong>100 points!</strong>)
+        </p>
+        
+        <div className="w-full">
+          <label htmlFor="reflection" className="block text-sm font-bold text-gray-700 mb-2">
+            Your Reflection (Required)
+          </label>
+          <textarea
+            id="reflection"
+            rows="5"
+            value={reflection}
+            onChange={(e) => setReflection(e.target.value)}
+            className="w-full p-3 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            placeholder="How do you feel? What did you learn? What changed?"
+          />
+        </div>
+        
+        <button
+          onClick={handleSubmit}
+          disabled={!reflection.trim() || isLoading}
+          className="w-full mt-4 bg-green-600 text-white py-2 px-4 rounded-md font-semibold shadow-lg hover:bg-green-700 transition duration-300 disabled:bg-gray-400 flex items-center justify-center"
+        >
+          {isLoading ? <Loader2 className="animate-spin" /> : 'Confirm & Get 100 Points'}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+
+// CẬP NHẬT: Component Sub-task Item (MỚI)
+// Component này quản lý logic nội tại của nó (sửa, lưu)
+function SubTaskItem({ todo, userId, goalId, onGoalTodoComplete }) {
+  const [isEditing, setIsEditing] = useState(false);
+  const [editText, setEditText] = useState(todo.task);
+  const [editDate, setEditDate] = useState(todo.date);
+  const [isLoading, setIsLoading] = useState(false);
+  
+  const subTaskRef = doc(db, usersPath, userId, goalsPath, goalId, goalTodosPath, todo.id);
+
+  const toggleTodo = async () => {
+    const isCompleting = !todo.completed;
+    const pointsToAdd = isCompleting ? 2 : -2; // +2 or -2
+    try {
+      await updateDoc(subTaskRef, { completed: isCompleting });
+      onGoalTodoComplete(pointsToAdd); // Gửi +2 hoặc -2
+    } catch (error) {
+      console.error("Error updating sub-task: ", error);
+    }
+  };
+
+  const handleEdit = () => {
+    setIsEditing(true);
+  };
+
+  const handleCancel = () => {
+    setIsEditing(false);
+    setEditText(todo.task);
+    setEditDate(todo.date);
+  };
+  
+  const handleSave = async () => {
+     if (!editText.trim() || !editDate) return;
+     setIsLoading(true);
+     try {
+       await updateDoc(subTaskRef, {
+         task: editText.trim(),
+         date: editDate,
+       });
+       setIsEditing(false);
+     } catch (error) {
+       console.error("Error saving sub-task: ", error);
+     }
+     setIsLoading(false);
+  };
+
+  /* ĐÃ XÓA hàm handleDelete */
+
+  if (isEditing) {
+    return (
+      <li className="flex flex-col gap-2 bg-white/60 p-3 rounded-lg shadow-inner ring-2 ring-blue-500">
+        <input
+          type="text"
+          value={editText}
+          onChange={(e) => setEditText(e.target.value)}
+          className="w-full px-3 py-1 border border-gray-300 rounded-md shadow-sm text-sm"
+        />
+        <input
+          type="date"
+          value={editDate}
+          onChange={(e) => setEditDate(e.target.value)}
+          className="w-full px-3 py-1 border border-gray-300 rounded-md shadow-sm text-sm"
+        />
+        <div className="flex justify-end gap-2 mt-1">
+          <button onClick={handleCancel} className="text-sm text-gray-600 hover:text-gray-900 font-medium p-1">
+            Cancel
+          </button>
+          <button 
+            onClick={handleSave} 
+            disabled={isLoading}
+            className="text-sm bg-blue-600 text-white py-1 px-3 rounded-md hover:bg-blue-700 disabled:bg-gray-400"
+          >
+            {isLoading ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
+          </button>
+        </div>
+      </li>
+    );
+  }
+
+  return (
+    <li className={`flex items-center p-2 rounded-md group ${todo.completed ? 'bg-gray-100' : 'bg-todo'}`}>
+      <button onClick={toggleTodo} className="mr-2 shrink-0">
+        {todo.completed ? (
+          <CheckCircle size={20} className="text-green-600" />
+        ) : (
+          <Circle size={20} className="text-blue-500" />
+        )}
+      </button>
+      <div className="grow">
+        <span className={`text-sm ${todo.completed ? 'text-gray-500 line-through' : 'text-gray-900'}`}>
+          {todo.task}
+        </span>
+        <span className="block text-xs text-gray-500">
+          Due: {todo.date}
+        </span>
+      </div>
+      {!todo.completed && (
+        <button 
+          onClick={handleEdit} 
+          className="ml-2 p-1 text-gray-400 hover:text-blue-600 opacity-0 group-hover:opacity-100 transition-opacity"
+        >
+          <Edit2 size={16} />
+        </button>
+      )}
+      {/* ĐÃ XÓA Nút Xóa (Trash2) */}
+    </li>
+  );
+}
+
 /**
- * Goal Item (Đã cập nhật logic + UI)
+ * SubTask List Component
  */
-function GoalItem({ goal, userId, onGoalTodoComplete }) {
-  const [todos, setTodos] = useState([]);
+function SubTaskList({ userId, goal, onGoalTodoComplete }) {
+  const [subTasks, setSubTasks] = useState([]);
   const [newTask, setNewTask] = useState('');
   const [newTodoDate, setNewTodoDate] = useState(getISODate());
   const [isLoading, setIsLoading] = useState(false);
 
-  const goalTodosQuery = useMemo(() => {
+  const subTasksQuery = useMemo(() => {
+    // CẬP NHẬT: Query vào sub-collection
     return query(
-      collection(db, goalTodosPath),
-      where('userId', '==', userId),
-      where('goalId', '==', goal.id)
+      collection(db, usersPath, userId, goalsPath, goal.id, goalTodosPath),
+      orderBy('date', 'asc') // Sắp xếp theo ngày
     );
   }, [userId, goal.id]);
 
   useEffect(() => {
-    const unsubscribe = onSnapshot(goalTodosQuery, (snapshot) => {
+    const unsubscribe = onSnapshot(subTasksQuery, (snapshot) => {
       const fetchedTodos = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
-      fetchedTodos.sort((a, b) => {
-        if (a.date !== b.date) return new Date(a.date) - new Date(b.date);
-        return new Date(a.createdAt) - new Date(a.createdAt);
-      });
-      setTodos(fetchedTodos);
+      setSubTasks(fetchedTodos);
     }, (error) => {
       console.error("Goal Todos listener error: ", error);
     });
     return () => unsubscribe();
-  }, [goalTodosQuery]);
+  }, [subTasksQuery]);
 
   const handleAddTodo = async (e) => {
     e.preventDefault();
@@ -272,13 +526,12 @@ function GoalItem({ goal, userId, onGoalTodoComplete }) {
 
     setIsLoading(true);
     try {
-      await addDoc(collection(db, goalTodosPath), {
-        userId,
-        goalId: goal.id,
+      // CẬP NHẬT: Thêm vào sub-collection
+      await addDoc(collection(db, usersPath, userId, goalsPath, goal.id, goalTodosPath), {
         task: newTask.trim(),
         date: newTodoDate,
         completed: false,
-        createdAt: new Date().toISOString(),
+        createdAt: Timestamp.now(), // Dùng Timestamp của server
       });
       setNewTask('');
       setNewTodoDate(getISODate());
@@ -287,172 +540,158 @@ function GoalItem({ goal, userId, onGoalTodoComplete }) {
     }
     setIsLoading(false);
   };
-
-  // CẬP NHẬT: +2 khi check, -2 khi uncheck
-  const toggleTodo = async (todoId, currentStatus) => {
-    const isCompleting = !currentStatus;
-    const pointsToAdd = isCompleting ? 2 : -2; // +2 or -2
-    try {
-      const todoRef = doc(db, goalTodosPath, todoId);
-      await updateDoc(todoRef, { completed: isCompleting });
-      
-      onGoalTodoComplete(pointsToAdd); // Gửi +2 hoặc -2
-      
-    } catch (error) {
-      console.error("Error updating sub-task: ", error);
-    }
-  };
-
-  const handleMarkGoalComplete = async () => {
-    try {
-      const goalRef = doc(db, goalsPath, goal.id);
-      await updateDoc(goalRef, { completed: true });
-    } catch (error) {
-      console.error("Error completing goal: ", error);
-    }
-  };
   
-  const completedTodos = todos.filter(t => t.completed).length;
-  const totalTodos = todos.length;
+  const completedTodos = subTasks.filter(t => t.completed).length;
+  const totalTodos = subTasks.length;
   const progress = totalTodos > 0 ? (completedTodos / totalTodos) * 100 : 0;
-  
-  // CẬP NHẬT: Nhóm to-do theo ngày
-  const groupedTodos = todos.reduce((acc, todo) => {
-    const date = todo.date;
-    if (!acc[date]) {
-      acc[date] = [];
-    }
-    acc[date].push(todo);
-    return acc;
-  }, {});
 
   return (
-    // CẬP NHẬT: Dùng màu custom `bg-goal`
-    <div className={`p-4 rounded-lg shadow-lg border-l-4 ${goal.completed ? 'bg-gray-200 border-gray-400 opacity-60' : 'bg-goal border-red-500'}`}>
-      <div className="flex justify-between items-start">
-        <div>
-          <h3 className={`text-xl font-bold ${goal.completed ? 'text-gray-600 line-through' : 'text-gray-900'}`}>
-            {goal.title}
-          </h3>
-          <p className="text-sm text-gray-700 flex items-center">
-            <Calendar size={14} className="mr-1" />
-            Goal Deadline: {goal.endDate}
-          </p>
-        </div>
-        {!goal.completed && (
-          <button
-            onClick={handleMarkGoalComplete}
-            title="Mark entire goal as complete (Archive)"
-            className="text-sm bg-green-600 text-white py-1 px-3 rounded-full hover:bg-green-700 transition shadow-md"
-          >
-            <Archive size={16} className="inline-block" /> Mark as Done
-          </button>
-        )}
-      </div>
+    <div className="mt-4 pl-4 border-l-2 border-blue-200">
+      <h4 className="text-sm font-semibold text-gray-800 mb-2">Sub-Tasks (+2 pts each):</h4>
 
-      {totalTodos > 0 && !goal.completed && (
-        <div className="mt-3">
+      {totalTodos > 0 && (
+        <div className="mb-3">
           <span className="text-xs font-medium text-gray-800">Progress: {completedTodos}/{totalTodos}</span>
-          <div className="w-full bg-red-100 rounded-full h-2.5 mt-1">
+          <div className="w-full bg-blue-100 rounded-full h-2.5 mt-1">
             <div 
-              className="bg-red-500 h-2.5 rounded-full transition-all duration-500" 
+              className="bg-blue-600 h-2.5 rounded-full transition-all duration-500" 
               style={{ width: `${progress}%` }}
             ></div>
           </div>
         </div>
       )}
-
-      <div className="mt-4 pl-4 border-l-2 border-red-200">
-        <h4 className="text-sm font-semibold text-gray-800 mb-2">Sub-Tasks (+2 pts each):</h4>
-        
-        {/* CẬP NHẬT: Hiển thị theo nhóm ngày */}
-        <div className="space-y-3">
-          {Object.keys(groupedTodos).length > 0 ? (
-            Object.entries(groupedTodos).map(([date, dateTodos]) => (
-              <div key={date} className="bg-white/60 p-3 rounded-lg shadow-inner">
-                <h5 className="font-semibold text-sm text-gray-700 mb-2 border-b border-red-100 pb-1">
-                  Due: {date}
-                </h5>
-                <ul className="space-y-2">
-                  {dateTodos.map(todo => (
-                    // CẬP NHẬT: Dùng màu custom `bg-todo`
-                    <li key={todo.id} className="flex items-center bg-todo p-2 rounded-md shadow-sm">
-                      <button onClick={() => toggleTodo(todo.id, todo.completed)} className="mr-2">
-                        {todo.completed ? (
-                          <CheckCircle size={20} className="text-green-600" />
-                        ) : (
-                          <Circle size={20} className="text-red-500" />
-                        )}
-                      </button>
-                      <span className={`grow text-sm ${todo.completed ? 'text-gray-500 line-through' : 'text-gray-900'}`}>
-                        {todo.task}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            ))
-          ) : (
-             !goal.completed && <p className="text-sm text-gray-700 italic">No sub-tasks added yet.</p>
-          )}
-        </div>
-
-        {!goal.completed && (
-          <form onSubmit={handleAddTodo} className="mt-4 space-y-2">
-            <div className="flex">
-              <input
-                type="text"
-                value={newTask}
-                onChange={(e) => setNewTask(e.target.value)}
-                className="grow px-3 py-1.5 border border-gray-300 rounded-l-md shadow-sm text-sm focus:outline-none focus:ring-1 focus:ring-red-400"
-                placeholder="Add new sub-task..."
+      
+      <div className="space-y-2">
+        {subTasks.length > 0 ? (
+          <ul className="space-y-2">
+            {subTasks.map(todo => (
+              <SubTaskItem 
+                key={todo.id}
+                todo={todo}
+                userId={userId}
+                goalId={goal.id}
+                onGoalTodoComplete={onGoalTodoComplete}
               />
-              <button
-                type="submit"
-                disabled={isLoading}
-                className="px-3 py-1.5 bg-red-600 text-white rounded-r-md hover:bg-red-700 disabled:bg-gray-400 flex items-center justify-center shadow-sm"
-              >
-                {isLoading ? <Loader2 size={16} className="animate-spin" /> : <Plus size={16} />}
-              </button>
-            </div>
-            <div>
-              <label className="text-xs font-medium text-gray-700">Due Date for new task:</label>
-              <input
-                type="date"
-                value={newTodoDate}
-                onChange={(e) => setNewTodoDate(e.target.value)}
-                className="w-full px-3 py-1.5 border border-gray-300 rounded-md shadow-sm text-sm focus:outline-none focus:ring-1 focus:ring-red-400"
-                required
-              />
-            </div>
-          </form>
+            ))}
+          </ul>
+        ) : (
+           <p className="text-sm text-gray-700 italic">No sub-tasks added yet.</p>
         )}
       </div>
+
+      <form onSubmit={handleAddTodo} className="mt-4 space-y-2">
+        <div className="flex">
+          <input
+            type="text"
+            value={newTask}
+            onChange={(e) => setNewTask(e.target.value)}
+            className="grow px-3 py-1.5 border border-gray-300 rounded-l-md shadow-sm text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
+            placeholder="Add new sub-task..."
+          />
+          <button
+            type="submit"
+            disabled={isLoading}
+            className="px-3 py-1.5 bg-blue-600 text-white rounded-r-md hover:bg-blue-700 disabled:bg-gray-400 flex items-center justify-center shadow-sm"
+          >
+            {isLoading ? <Loader2 size={16} className="animate-spin" /> : <Plus size={16} />}
+          </button>
+        </div>
+        <div>
+          <label className="text-xs font-medium text-gray-700">Due Date for new task:</label>
+          <input
+            type="date"
+            value={newTodoDate}
+            onChange={(e) => setNewTodoDate(e.target.value)}
+            className="w-full px-3 py-1.5 border border-gray-300 rounded-md shadow-sm text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
+            min={getISODate()}
+            required
+          />
+        </div>
+      </form>
     </div>
   );
 }
 
 /**
- * Goals Panel (Đã cập nhật logic + UI)
+ * Goal Item (Đã cập nhật)
+ */
+function GoalItem({ goal, userId, onGoalTodoComplete, onMarkComplete }) {
+  
+  return (
+    <div className={`p-4 rounded-lg shadow-lg border-l-4 ${goal.completed ? 'bg-gray-100 border-gray-300 opacity-70' : 'bg-goal border-blue-500'}`}>
+      <div className="flex justify-between items-start mb-3">
+        <div>
+          <h3 className={`text-xl font-bold ${goal.completed ? 'text-gray-600 line-through' : 'text-gray-900'}`}>
+            {goal.title}
+          </h3>
+          <p className="text-sm text-gray-700 flex items-center mt-1">
+            <Calendar size={14} className="mr-1.5" />
+            Target: {goal.endDate}
+          </p>
+        </div>
+        {/* CẬP NHẬT: Nút "Mark as Done" giờ sẽ mở Modal */}
+        {!goal.completed && (
+          <button
+            onClick={() => onMarkComplete(goal)}
+            title="Mark entire goal as complete (Archive)"
+            className="text-sm bg-green-600 text-white py-2 px-3 rounded-lg hover:bg-green-700 transition shadow-md flex items-center"
+          >
+            <Archive size={16} className="inline-block mr-1.5" /> Mark as Done
+          </button>
+        )}
+      </div>
+
+      {/* CẬP NHẬT: Thêm Countdown */}
+      {!goal.completed && (
+        <div className="mb-4">
+          <CountdownTimer targetDate={goal.endDate} />
+        </div>
+      )}
+
+      {/* Nếu đã xong, hiển thị reflection */}
+      {goal.completed && goal.reflection && (
+        <div className="mt-4 p-3 bg-green-50 rounded-lg border border-green-200">
+          <h5 className="text-sm font-bold text-green-800 mb-1">My Reflection:</h5>
+          <p className="text-sm text-gray-700 italic">"{goal.reflection}"</p>
+        </div>
+      )}
+      
+      {/* Chỉ hiển thị Sub-tasks nếu Goal chưa xong */}
+      {!goal.completed && (
+        <SubTaskList 
+          userId={userId} 
+          goal={goal} 
+          onGoalTodoComplete={onGoalTodoComplete}
+        />
+      )}
+    </div>
+  );
+}
+
+
+/**
+ * Goals Panel (Đã cập nhật)
  */
 function GoalsPanel({ userId, onGoalTodoComplete }) {
   const [goals, setGoals] = useState([]);
   const [newGoalTitle, setNewGoalTitle] = useState('');
   const [newGoalDate, setNewGoalDate] = useState(getISODate());
   const [isLoading, setIsLoading] = useState(false);
-  const [showArchived, setShowArchived] = useState(false); // CẬP NHẬT: State lưu trữ
+  const [showArchived, setShowArchived] = useState(false);
+  
+  // CẬP NHẬT: State cho Modal
+  const [completingGoal, setCompletingGoal] = useState(null); 
 
   const goalsQuery = useMemo(() => {
+    // CẬP NHẬT: Query vào sub-collection
     return query(
-      collection(db, goalsPath),
-      where('userId', '==', userId)
+      collection(db, usersPath, userId, goalsPath)
     );
   }, [userId]);
 
   useEffect(() => {
     const unsubscribe = onSnapshot(goalsQuery, (snapshot) => {
       const fetchedGoals = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
-      // Sắp xếp: chưa xong lên trước, sau đó là ngày tạo (mới nhất)
       fetchedGoals.sort((a, b) => {
         if (a.completed !== b.completed) return a.completed ? 1 : -1;
         return new Date(b.createdAt) - new Date(a.createdAt);
@@ -470,12 +709,13 @@ function GoalsPanel({ userId, onGoalTodoComplete }) {
 
     setIsLoading(true);
     try {
-      await addDoc(collection(db, goalsPath), {
-        userId,
+      // CẬP NHẬT: Thêm vào sub-collection
+      await addDoc(collection(db, usersPath, userId, goalsPath), {
         title: newGoalTitle.trim(),
         endDate: newGoalDate,
         completed: false,
-        createdAt: new Date().toISOString(),
+        reflection: '', // Thêm trường reflection
+        createdAt: Timestamp.now(),
       });
       setNewGoalTitle('');
       setNewGoalDate(getISODate());
@@ -485,19 +725,23 @@ function GoalsPanel({ userId, onGoalTodoComplete }) {
     setIsLoading(false);
   };
   
-  // CẬP NHẬT: Lọc ra 2 danh sách
   const activeGoals = goals.filter(g => !g.completed);
   const archivedGoals = goals.filter(g => g.completed);
+  
+  // CẬP NHẬT: Hàm xác nhận (được gọi từ Modal)
+  const handleConfirmCompletion = (pointsToAdd) => {
+    onGoalTodoComplete(pointsToAdd); // Chuyển 100 điểm lên App
+    setCompletingGoal(null); // Đóng modal
+  };
 
   return (
     <div className="bg-white p-6 rounded-lg shadow-xl h-full">
       <h2 className="text-3xl font-bold text-gray-800 mb-4 flex items-center">
-        <Target size={28} className="mr-2 text-red-600" />
+        <Target size={28} className="mr-2 text-blue-600" />
         My Goals
       </h2>
       
-      {/* CẬP NHẬT: Dùng màu custom `bg-goal-form` */}
-      <form onSubmit={handleAddGoal} className="mb-6 p-4 bg-goal-form rounded-lg border border-red-200 shadow-md">
+      <form onSubmit={handleAddGoal} className="mb-6 p-4 bg-goal-form rounded-lg border border-blue-200 shadow-md">
         <h3 className="text-lg font-semibold text-gray-900 mb-3">Add a New Goal</h3>
         <div className="mb-3">
           <label htmlFor="goalTitle" className="block text-sm font-medium text-gray-700 mb-1">Goal Title</label>
@@ -506,7 +750,7 @@ function GoalsPanel({ userId, onGoalTodoComplete }) {
             type="text"
             value={newGoalTitle}
             onChange={(e) => setNewGoalTitle(e.target.value)}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-red-500"
+            className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
             placeholder="e.g., Master React Hooks"
             required
           />
@@ -518,7 +762,7 @@ function GoalsPanel({ userId, onGoalTodoComplete }) {
             type="date"
             value={newGoalDate}
             onChange={(e) => setNewGoalDate(e.target.value)}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-red-500"
+            className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
             min={getISODate()}
             required
           />
@@ -526,15 +770,14 @@ function GoalsPanel({ userId, onGoalTodoComplete }) {
         <button
           type="submit"
           disabled={isLoading}
-          className="w-full bg-red-600 text-white py-2 px-4 rounded-md font-semibold shadow-lg hover:bg-red-700 transition duration-300 disabled:bg-gray-400 flex items-center justify-center"
+          className="w-full bg-blue-600 text-white py-2 px-4 rounded-md font-semibold shadow-lg hover:bg-blue-700 transition duration-300 disabled:bg-gray-400 flex items-center justify-center"
         >
           {isLoading ? <Loader2 className="animate-spin" /> : <Plus className="mr-1" />} Add Goal
         </button>
       </form>
 
-      {/* CẬP NHẬT: Hiển thị 2 danh sách */}
       <div className="space-y-4">
-        <h3 className="text-xl font-bold text-gray-800 border-b-2 border-red-200 pb-2">Active Goals</h3>
+        <h3 className="text-xl font-bold text-gray-800 border-b-2 border-blue-200 pb-2">Active Goals</h3>
         {activeGoals.length > 0 ? (
           activeGoals.map(goal => (
             <GoalItem 
@@ -542,6 +785,7 @@ function GoalsPanel({ userId, onGoalTodoComplete }) {
               goal={goal} 
               userId={userId}
               onGoalTodoComplete={onGoalTodoComplete}
+              onMarkComplete={setCompletingGoal} // CẬP NHẬT: Mở Modal
             />
           ))
         ) : (
@@ -566,6 +810,7 @@ function GoalsPanel({ userId, onGoalTodoComplete }) {
                     goal={goal} 
                     userId={userId}
                     onGoalTodoComplete={onGoalTodoComplete}
+                    onMarkComplete={setCompletingGoal} // Vẫn cho phép mở modal
                   />
                 ))
               ) : (
@@ -575,23 +820,38 @@ function GoalsPanel({ userId, onGoalTodoComplete }) {
           )}
         </div>
       </div>
+      
+      {/* CẬP NHẬT: Render Modal */}
+      {completingGoal && (
+        <GoalCompletionModal 
+          goal={completingGoal}
+          userId={userId}
+          onClose={() => setCompletingGoal(null)}
+          onConfirm={handleConfirmCompletion}
+        />
+      )}
     </div>
   );
 }
 
 /**
- * Study Logger Panel (Đã cập nhật UI + logic)
+ * CẬP NHẬT: Study Logger Panel (Đã đổi thành Đồng hồ bấm giờ)
  */
 function StudyLoggerPanel({ userId, onStudyLogged, onShowReport }) {
-  const [hours, setHours] = useState(0);
-  const [minutes, setMinutes] = useState(0);
+  const [elapsedTime, setElapsedTime] = useState(0); // Tính bằng giây
+  const [isRunning, setIsRunning] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState('');
   const [logs, setLogs] = useState([]);
-  
+
+  // Refs để giữ giá trị khi component re-render
+  const timerRef = useRef(null);
+  const startTimeRef = useRef(0);
+
+  // Tải logs (như cũ)
   const studyLogsQuery = useMemo(() => {
      return query(
-       collection(db, studyLogsPath),
+       collection(db, usersPath, userId, studyLogsPath),
+       orderBy('createdAt', 'desc'),
        where('userId', '==', userId)
      );
    }, [userId]);
@@ -599,108 +859,134 @@ function StudyLoggerPanel({ userId, onStudyLogged, onShowReport }) {
   useEffect(() => {
     const unsubscribe = onSnapshot(studyLogsQuery, (snapshot) => {
       const fetchedLogs = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
-      fetchedLogs.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
       setLogs(fetchedLogs.slice(0, 5)); // Lấy 5 logs gần nhất
     }, (error) => {
       console.error("Study logs listener error: ", error);
     });
     return () => unsubscribe();
   }, [studyLogsQuery]);
+  
+  // Cảnh báo khi tắt tab (MỚI)
+  useEffect(() => {
+    const handleBeforeUnload = (e) => {
+      if (isRunning) {
+        e.preventDefault();
+        e.returnValue = 'You have a study session in progress. Are you sure you want to leave?';
+      }
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [isRunning]);
 
+  // Dọn dẹp interval (MỚI)
+  useEffect(() => {
+    return () => clearInterval(timerRef.current);
+  }, []);
+  
+  const handleStart = () => {
+    if (isRunning) return;
+    setIsRunning(true);
+    // startTimeRef lưu thời điểm bắt đầu (đã trừ đi thời gian đã chạy)
+    // Điều này giúp đồng hồ chạy đúng ngay cả khi đổi tab
+    startTimeRef.current = Date.now() - (elapsedTime * 1000); 
+    
+    timerRef.current = setInterval(() => {
+      // Tính toán thời gian đã trôi qua chính xác
+      const seconds = Math.floor((Date.now() - startTimeRef.current) / 1000);
+      setElapsedTime(seconds);
+    }, 1000);
+  };
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    setError('');
+  const handleStop = () => {
+    if (!isRunning) return;
+    setIsRunning(false);
+    clearInterval(timerRef.current);
+  };
 
-    const totalMinutes = (parseInt(hours) || 0) * 60 + (parseInt(minutes) || 0);
-    if (totalMinutes <= 0) {
-      setError('Study time must be greater than 0.');
+  const handleLogSession = async () => {
+    if (isRunning) {
+      handleStop(); // Tự động dừng nếu đang chạy
+    }
+    
+    if (elapsedTime < 60) { // Chỉ log nếu > 1 phút
+      alert("You need to study for at least 1 minute to log a session.");
+      setElapsedTime(0); // Reset
       return;
     }
 
     setIsLoading(true);
     
-    try {
-      const totalHours = totalMinutes / 60;
-      const pointsEarned = Math.round(totalHours * 20);
+    const totalMinutes = Math.floor(elapsedTime / 60);
+    const hours = Math.floor(totalMinutes / 60);
+    const minutes = totalMinutes % 60;
+    const totalHours = totalMinutes / 60;
+    const pointsEarned = Math.round(totalHours * 20);
 
+    try {
       const logData = {
         userId,
-        hours: parseInt(hours) || 0,
-        minutes: parseInt(minutes) || 0,
+        hours: hours,
+        minutes: minutes,
         totalHours: totalHours,
         points: pointsEarned,
         date: getISODate(),
-        createdAt: new Date().toISOString(),
+        createdAt: Timestamp.now(),
       };
-      await addDoc(collection(db, studyLogsPath), logData);
+      await addDoc(collection(db, usersPath, userId, studyLogsPath), logData);
       
       onStudyLogged(pointsEarned);
-      
-      setHours(0);
-      setMinutes(0);
-      e.target.reset();
+      setElapsedTime(0); // Reset đồng hồ
 
     } catch (err) {
       console.error("Error logging study time: ", err);
-      setError('An error occurred. Please try again.');
     }
     setIsLoading(false);
   };
 
   return (
-    <div className="bg-white p-6 rounded-lg shadow-xl h-full">
-      <h2 className="text-3xl font-bold text-gray-800 mb-4 flex items-center">
-        <BookOpen size={28} className="mr-2 text-blue-600" />
-        Log Study Time
+    <div className="bg-white p-6 rounded-lg shadow-xl h-full flex flex-col">
+      <h2 className="text-3xl font-bold text-gray-800 mb-2 flex items-center">
+        <Clock size={28} className="mr-2 text-green-600" />
+        Study Timer
       </h2>
-      <p className="text-sm text-gray-600 mb-4">(+20 points per hour)</p>
+      <p className="text-sm text-gray-600 mb-6">(+20 points per hour)</p>
 
-      {error && (
-        <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded-md mb-4" role="alert">
-          <p>{error}</p>
-        </div>
-      )}
-
-      {/* CẬP NHẬT: Dùng màu custom `bg-study` */}
-      <form onSubmit={handleSubmit} className="mb-6 p-4 bg-study rounded-lg border border-blue-200 shadow-md">
-        <div className="grid grid-cols-2 gap-4 mb-4">
-          <div>
-            <label htmlFor="hours" className="block text-sm font-medium text-gray-700 mb-1">Hours</label>
-            <input
-              id="hours"
-              type="number"
-              value={hours}
-              onChange={(e) => setHours(e.target.value)}
-              min="0"
-              className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-          </div>
-          <div>
-            <label htmlFor="minutes" className="block text-sm font-medium text-gray-700 mb-1">Minutes</label>
-            <input
-              id="minutes"
-              type="number"
-              value={minutes}
-              onChange={(e) => setMinutes(e.target.value)}
-              min="0"
-              max="59"
-              className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-          </div>
-        </div>
+      {/* Đồng hồ */}
+      <div className="text-center p-6 bg-study rounded-lg border border-green-200 shadow-md">
+        <h3 className="text-7xl font-bold text-gray-900 font-mono">
+          {formatStopwatchTime(elapsedTime)}
+        </h3>
+        <p className="text-sm text-gray-700">Hours : Minutes : Seconds</p>
         
-        <button
-          type="submit"
-          disabled={isLoading}
-          className="w-full bg-blue-600 text-white py-2 px-4 rounded-md font-semibold shadow-lg hover:bg-blue-700 transition duration-300 disabled:bg-gray-400 flex items-center justify-center"
-        >
-          {isLoading ? <Loader2 className="animate-spin" /> : 'Log Session'}
-        </button>
-      </form>
+        <div className="flex justify-center gap-4 mt-6">
+          {!isRunning ? (
+            <button
+              onClick={handleStart}
+              className="w-28 bg-green-600 text-white py-2 px-4 rounded-md font-semibold shadow-lg hover:bg-green-700 transition duration-300 flex items-center justify-center"
+            >
+              <Play size={16} className="mr-1.5" /> Start
+            </button>
+          ) : (
+            <button
+              onClick={handleStop}
+              className="w-28 bg-yellow-500 text-white py-2 px-4 rounded-md font-semibold shadow-lg hover:bg-yellow-600 transition duration-300 flex items-center justify-center"
+            >
+              <Square size={16} className="mr-1.5" /> Stop
+            </button>
+          )}
+          
+          <button
+            onClick={handleLogSession}
+            disabled={isLoading || isRunning || elapsedTime === 0}
+            className="w-40 bg-blue-600 text-white py-2 px-4 rounded-md font-semibold shadow-lg hover:bg-blue-700 transition duration-300 disabled:bg-gray-400 flex items-center justify-center"
+          >
+            {isLoading ? <Loader2 className="animate-spin" /> : 'Log & Reset Session'}
+          </button>
+        </div>
+      </div>
       
-      {/* CẬP NHẬT: Dùng màu custom `bg-history` */}
-      <div className="bg-history p-4 rounded-lg shadow-inner">
+      {/* Lịch sử */}
+      <div className="bg-history p-4 rounded-lg shadow-inner mt-6 grow flex flex-col">
         <h3 className="text-lg font-semibold text-gray-800 mb-3 border-b border-gray-300 pb-2">Recent History</h3>
         {logs.length > 0 ? (
           <ul className="space-y-3">
@@ -711,7 +997,10 @@ function StudyLoggerPanel({ userId, onStudyLogged, onShowReport }) {
                     {log.hours}h {log.minutes}m
                     <span className="ml-2 text-green-700 font-bold">(+{log.points} pts)</span>
                   </p>
-                  <p className="text-sm text-gray-600">{log.date}</p>
+                  <p className="text-sm text-gray-600">
+                    {/* Chuyển Timestamp (nếu có) về Date */}
+                    {log.createdAt.toDate ? log.createdAt.toDate().toLocaleString() : log.createdAt}
+                  </p>
                 </div>
               </li>
             ))}
@@ -720,10 +1009,9 @@ function StudyLoggerPanel({ userId, onStudyLogged, onShowReport }) {
           <p className="text-center text-gray-600 italic py-4">No study sessions logged yet.</p>
         )}
         
-        {/* CẬP NHẬT: Nút Báo cáo ở đây */}
         <button
           onClick={onShowReport}
-          className="mt-4 w-full bg-blue-600 text-white py-2 px-4 rounded-md font-semibold shadow-lg hover:bg-blue-700 transition duration-300 flex items-center justify-center"
+          className="mt-auto w-full bg-blue-600 text-white py-2 px-4 rounded-md font-semibold shadow-lg hover:bg-blue-700 transition duration-300 flex items-center justify-center"
         >
           <TrendingUp size={20} className="mr-2" />
           View Monthly Report
@@ -733,8 +1021,125 @@ function StudyLoggerPanel({ userId, onStudyLogged, onShowReport }) {
   );
 }
 
+// CẬP NHẬT: Component Ghi chú tự do (MỚI)
+function NotesPanel({ userId }) {
+  const [notes, setNotes] = useState([]);
+  const [newNote, setNewNote] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+
+  const notesQuery = useMemo(() => {
+    return query(
+      collection(db, usersPath, userId, notesPath),
+      orderBy('createdAt', 'desc')
+    );
+  }, [userId]);
+
+  useEffect(() => {
+    const unsubscribe = onSnapshot(notesQuery, (snapshot) => {
+      const fetchedNotes = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+      setNotes(fetchedNotes);
+    }, (error) => {
+      console.error("Notes listener error: ", error);
+    });
+    return () => unsubscribe();
+  }, [notesQuery]);
+
+  const handleAddNote = async (e) => {
+    e.preventDefault();
+    if (!newNote.trim()) return;
+
+    setIsLoading(true);
+    try {
+      await addDoc(collection(db, usersPath, userId, notesPath), {
+        content: newNote.trim(),
+        createdAt: Timestamp.now(),
+      });
+      setNewNote('');
+    } catch (error) {
+      console.error("Error adding note: ", error);
+    }
+    setIsLoading(false);
+  };
+  
+  const handleDeleteNote = async (noteId) => {
+    if (window.confirm("Are you sure you want to delete this note?")) {
+      try {
+        await deleteDoc(doc(db, usersPath, userId, notesPath, noteId));
+      } catch (error) {
+        console.error("Error deleting note: ", error);
+      }
+    }
+  };
+  
+  // Nhóm ghi chú theo ngày
+  const groupedNotes = notes.reduce((acc, note) => {
+    const date = note.createdAt.toDate().toLocaleDateString('en-CA'); // YYYY-MM-DD
+    if (!acc[date]) {
+      acc[date] = [];
+    }
+    acc[date].push(note);
+    return acc;
+  }, {});
+
+  return (
+    <div className="bg-white p-6 rounded-lg shadow-xl h-full flex flex-col">
+      <h2 className="text-3xl font-bold text-gray-800 mb-4 flex items-center">
+        <StickyNote size={28} className="mr-2 text-yellow-500" />
+        My Notes
+      </h2>
+      
+      <form onSubmit={handleAddNote} className="mb-4">
+        <textarea
+          rows="4"
+          value={newNote}
+          onChange={(e) => setNewNote(e.target.value)}
+          className="w-full p-3 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-yellow-500"
+          placeholder="Write down your thoughts, ideas, or reminders..."
+        />
+        <button
+          type="submit"
+          disabled={isLoading || !newNote.trim()}
+          className="w-full mt-2 bg-yellow-500 text-white py-2 px-4 rounded-md font-semibold shadow-lg hover:bg-yellow-600 transition duration-300 disabled:bg-gray-400 flex items-center justify-center"
+        >
+          {isLoading ? <Loader2 className="animate-spin" /> : <Send size={16} className="mr-1.5" />} Save Note
+        </button>
+      </form>
+
+      <h3 className="text-lg font-semibold text-gray-800 mb-3 border-b border-gray-300 pb-2">Recent Notes</h3>
+      <div className="grow overflow-y-auto space-y-4 pr-2">
+        {notes.length > 0 ? (
+          Object.entries(groupedNotes).map(([date, dateNotes]) => (
+            <div key={date}>
+              <h4 className="font-bold text-gray-700 text-md mb-2">{new Date(date).toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</h4>
+              <ul className="space-y-2">
+                {dateNotes.map(note => (
+                  <li key={note.id} className="bg-yellow-50 p-3 rounded-md shadow-sm group relative">
+                    <p className="text-gray-800 whitespace-pre-wrap">{note.content}</p>
+                    <p className="text-xs text-gray-500 mt-2">
+                      {note.createdAt.toDate().toLocaleTimeString()}
+                    </p>
+                    <button 
+                      onClick={() => handleDeleteNote(note.id)} 
+                      className="absolute top-2 right-2 p-1 text-gray-400 hover:text-red-600 opacity-0 group-hover:opacity-100 transition-opacity"
+                    >
+                      <Trash2 size={16} />
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))
+        ) : (
+          <p className="text-center text-gray-600 italic py-4">No notes saved yet.</p>
+        )}
+      </div>
+    </div>
+  );
+}
+
+
 /**
- * Report Modal (Đã đổi sang Tiếng Anh)
+ * Report Modal (Như cũ)
  */
 function ReportModal({ userId, onClose }) {
   const [data, setData] = useState([]);
@@ -744,7 +1149,8 @@ function ReportModal({ userId, onClose }) {
 
   const processData = useCallback((logs) => {
     const monthLogs = logs.filter(log => {
-      const logDate = new Date(log.date);
+      // CẬP NHẬT: Xử lý cả Timestamp và string
+      const logDate = log.date.toDate ? log.date.toDate() : new Date(log.date);
       return logDate.getMonth() === currentMonth && logDate.getFullYear() === currentYear;
     });
 
@@ -755,7 +1161,7 @@ function ReportModal({ userId, onClose }) {
     }));
 
     monthLogs.forEach(log => {
-      const dayOfMonth = new Date(log.date).getDate();
+      const dayOfMonth = (log.date.toDate ? log.date.toDate() : new Date(log.date)).getDate();
       aggregatedData[dayOfMonth - 1].hours += log.totalHours || 0;
     });
 
@@ -766,7 +1172,7 @@ function ReportModal({ userId, onClose }) {
     setIsLoading(true);
     const fetchLogs = async () => {
       try {
-        const q = query(collection(db, studyLogsPath), where("userId", "==", userId));
+        const q = query(collection(db, usersPath, userId, studyLogsPath), where("userId", "==", userId));
         const querySnapshot = await getDocs(q);
         const allLogs = querySnapshot.docs.map(doc => doc.data());
         processData(allLogs);
@@ -781,14 +1187,20 @@ function ReportModal({ userId, onClose }) {
   }, [userId, processData]);
   
   const monthName = new Date(currentYear, currentMonth).toLocaleString('en-US', { month: 'long' });
+  const totalStudyHours = data.reduce((acc, day) => acc + day.hours, 0);
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-50 p-4 font-quicksand">
       <div className="bg-white p-6 rounded-lg shadow-2xl w-full max-w-4xl h-[90vh] flex flex-col">
         <div className="flex justify-between items-center mb-4">
-          <h2 className="text-2xl font-bold text-gray-800">
-            Study Report ({monthName} / {currentYear})
-          </h2>
+          <div>
+            <h2 className="text-2xl font-bold text-gray-800">
+              Study Report ({monthName} {currentYear})
+            </h2>
+            <p className="text-gray-600">
+              Total study time this month: <strong>{totalStudyHours.toFixed(2)} hours</strong>
+            </p>
+          </div>
           <button onClick={onClose} className="text-gray-500 hover:text-gray-800">
             <X size={28} />
           </button>
@@ -806,14 +1218,14 @@ function ReportModal({ userId, onClose }) {
                   top: 5,
                   right: 20,
                   left: 0,
-                  bottom: 5,
+                  bottom: 20, // Tăng bottom margin
                 }}
               >
                 <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="day" label={{ value: 'Day', position: 'insideBottom', offset: -5 }} />
+                <XAxis dataKey="day" label={{ value: 'Day of the Month', position: 'insideBottom', offset: -10 }} />
                 <YAxis label={{ value: 'Study Hours', angle: -90, position: 'insideLeft', offset: 10 }} />
                 <Tooltip formatter={(value) => [`${value} hours`, "Study Time"]} />
-                <Legend />
+                <Legend verticalAlign="top" />
                 <Bar dataKey="hours" fill="#2563eb" name="Study Hours" />
               </BarChart>
             </ResponsiveContainer>
@@ -836,7 +1248,9 @@ export default function App() {
   const [showReport, setShowReport] = useState(false);
   const [showCodeModal, setShowCodeModal] = useState(false);
 
+  // Auth listener
   useEffect(() => {
+    // setLogLevel('debug'); // Bật log của Firebase
     const unsubscribe = onAuthStateChanged(auth, (user) => {
       if (user) {
         setUserAuth(user);
@@ -851,6 +1265,7 @@ export default function App() {
     return () => unsubscribe();
   }, []);
 
+  // User data listener
   useEffect(() => {
     if (!userId) {
       setShowSignup(false);
@@ -884,21 +1299,23 @@ export default function App() {
   const handleSignupSuccess = (userData) => {
     setCurrentUser(userData);
     setShowSignup(false);
-    setShowCodeModal(true);
+    setShowCodeModal(true); // Hiển thị modal code
   };
   
+  // Hàm cập nhật điểm (chung cho all)
   const handlePointUpdate = useCallback(async (pointsToAdd) => {
-    if (!userId) return;
+    if (!userId || pointsToAdd === 0) return;
     try {
       const userRef = doc(db, usersPath, userId);
       await updateDoc(userRef, {
-        points: increment(pointsToAdd) // Dùng chung cho cả +20, +2, -2
+        points: increment(pointsToAdd)
       });
     } catch (error) {
       console.error("Error updating points: ", error);
     }
   }, [userId]);
   
+  // Hàm copy code (như cũ)
   const copyCodeToClipboard = () => {
     if (currentUser?.publicCode) {
       const el = document.createElement('textarea');
@@ -906,8 +1323,10 @@ export default function App() {
       document.body.appendChild(el);
       el.select();
       try {
+        // Dùng execCommand vì clipboard.writeText có thể bị block trong iframe
         document.execCommand('copy');
         
+        // Tạo thông báo "Copied!"
         const copyMessage = document.createElement('div');
         copyMessage.textContent = 'Code copied to clipboard!';
         copyMessage.style.position = 'fixed';
@@ -925,11 +1344,13 @@ export default function App() {
         }, 2000);
 
       } catch (err) {
-        console.error('Could not copy');
+        console.error('Could not copy code');
       }
       document.body.removeChild(el);
     }
   };
+  
+  // --- Render ---
 
   if (isLoading) {
     return (
@@ -951,7 +1372,7 @@ export default function App() {
   if (currentUser) {
     return (
       <div className="min-h-screen bg-gray-100 p-4 md:p-8 font-quicksand">
-        {/* Header */}
+        {/* Header (Như cũ) */}
         <header className="bg-white shadow-xl rounded-lg p-6 mb-8">
           <div className="flex flex-col md:flex-row justify-between items-start">
             <div>
@@ -973,8 +1394,8 @@ export default function App() {
             </div>
             
             <div className="flex flex-col md:flex-row md:items-center space-y-4 md:space-y-0 md:space-x-4 mt-4 md:mt-0">
-               {/* CẬP NHẬT: Styling cho Total Score */}
-               <div className="text-center p-4 bg-score rounded-xl shadow-lg">
+               {/* Dùng màu đỏ tùy ý */}
+               <div className="text-center p-4 bg-[#f08080] rounded-xl shadow-lg">
                   <div className="text-sm font-bold text-white uppercase tracking-wider">Total Points</div>
                   <div className="text-4xl font-bold text-white">{currentUser.points}</div>
                 </div>
@@ -987,27 +1408,37 @@ export default function App() {
               </button>
             </div>
           </div>
-          {/* CẬP NHẬT: Đã bỏ nút Báo cáo khỏi Header */}
         </header>
 
-        {/* Main Content Grid (2 CỘT) */}
-        <main className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+        {/* CẬP NHẬT: Main Content Grid (3 CỘT) */}
+        <main className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+          
+          {/* CỘT 1: GOALS */}
           <div className="lg:col-span-1">
             <GoalsPanel 
               userId={userId} 
-              onGoalTodoComplete={handlePointUpdate} // Dùng chung 1 hàm
+              onGoalTodoComplete={handlePointUpdate}
             />
           </div>
+          
+          {/* CỘT 2: TIMER */}
           <div className="lg:col-span-1">
             <StudyLoggerPanel 
               userId={userId} 
-              onStudyLogged={handlePointUpdate} // Dùng chung 1 hàm
-              onShowReport={() => setShowReport(true)} // Thêm prop này
+              onStudyLogged={handlePointUpdate} 
+              onShowReport={() => setShowReport(true)}
+            />
+          </div>
+          
+          {/* CỘT 3: NOTES (MỚI) */}
+          <div className="lg:col-span-1">
+            <NotesPanel 
+              userId={userId}
             />
           </div>
         </main>
         
-        {/* Modals */}
+        {/* Modals (Như cũ) */}
         {showReport && (
           <ReportModal userId={userId} onClose={() => setShowReport(false)} />
         )}

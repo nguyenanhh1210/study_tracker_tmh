@@ -1,5 +1,5 @@
 /** @type {import('tailwindcss').Config} */
-import typography from '@tailwindcss/typography'; // <-- DÒNG MỚI
+import typography from '@tailwindcss/typography'; // <-- DÒNG NÀY RẤT QUAN TRỌNG
 
 export default {
   // Dòng "content" này là quan trọng nhất.
@@ -25,6 +25,6 @@ export default {
   },
   // CẬP NHẬT: Thêm plugin "typography" (cho Ghi chú)
   plugins: [
-    typography, // <-- DÒNG MỚI
+    typography, // <-- DÒNG NÀY RẤT QUAN TRỌNG
   ],
 }

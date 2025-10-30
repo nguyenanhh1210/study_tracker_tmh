@@ -1,10 +1,9 @@
 import React from 'react'
 import ReactDOM from 'react-dom/client'
-import App from './App.jsx'       // <-- Dùng đường dẫn chuẩn
-import './index.css'     // <-- Dùng đường dẫn chuẩn
+// QUAY LẠI DÙNG ĐƯỜNG DẪN TUYỆT ĐỐI (CẦN SỬA VITE.CONFIG.JS)
+import App from '/src/App.jsx'       
+import '/src/index.css'     
 
 ReactDOM.createRoot(document.getElementById('root')).render(
-  <React.StrictMode>
-    <App />
-  </React.StrictMode>,
+  <App />
 )

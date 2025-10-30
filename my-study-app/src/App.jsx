@@ -67,10 +67,9 @@ import {
   Clock, // Countdown
   MessageSquare, // Reflection
   Notebook, // Ghi chú
-  History, // Recent History
-  Heading2 // <-- ĐÃ THÊM DÒNG NÀY CHO NÚT TIÊU ĐỀ
+  History // Recent History
 } from 'lucide-react';
-import ContentEditable from 'react-contenteditable';
+import ContentEditable from 'react-contenteditable/lib/react-contenteditable.js'; // <-- SỬA LỖI BẰNG CÁCH CHỈ RÕ ĐƯỜNG DẪN
 
 // --- CẤU HÌNH FIREBASE ---
 const firebaseConfig = {
@@ -581,7 +580,7 @@ function GoalItem({ goal, userId, onGoalTodoComplete, onGoalAchieved }) {
               disabled={isLoading}
               className="text-sm bg-goal text-white px-3 py-1 rounded-md hover:opacity-80 disabled:bg-gray-400 flex items-center"
             >
-              {isLoading ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />} Save Goal
+              {isLoading ? <Loader2 className="animate-spin" /> : <Save size={16} />} Save Goal
             </button>
           </div>
         </form>
@@ -1057,8 +1056,6 @@ function NotesToolbar({ onCommand }) {
     { cmd: 'italic', icon: <Italic size={16} />, value: null, title: 'In nghiêng (Ctrl+I)' },
     { cmd: 'underline', icon: <Underline size={16} />, value: null, title: 'Gạch chân (Ctrl+U)' },
     { cmd: 'insertUnorderedList', icon: <List size={16} />, value: null, title: 'Bullet Point (Tab/Ctrl+Shift+8)' },
-    // Dùng formatBlock để tạo tiêu đề H2
-    { cmd: 'formatBlock', icon: <Heading2 size={16} />, value: '<h2>', title: 'Tiêu đề (H2)' },
   ];
 
   const handleMouseDown = (e, cmd, value) => {
@@ -1081,6 +1078,7 @@ function NotesToolbar({ onCommand }) {
       {tools.map((tool) => (
         <button
           key={tool.cmd + tool.value}
+          type="button" // <--- Đã thêm type="button" để ngăn form submit
           onMouseDown={(e) => handleMouseDown(e, tool.cmd, tool.value)}
           className="p-2 rounded-md hover:bg-gray-200 text-gray-700"
           title={tool.title}
@@ -1125,16 +1123,18 @@ function NoteItemEditable({ note, onDelete }) {
     }
     
     if (command === 'insertUnorderedList') {
-        document.execCommand('insertHTML', false, '<ul><li>• &nbsp;</li></ul>');
-    } else if (command === 'formatBlock' && value === '<h2>') {
-        document.execCommand('formatBlock', false, '<h2>');
-        document.execCommand('bold', false, null);
+        document.execCommand('insertHTML', false, '<li> &nbsp;</li>');
     } else {
         document.execCommand(command, false, value);
     }
     
     // Cập nhật lại HTML sau khi lệnh được thực thi (để đồng bộ state)
-    setEditHtml(contentRef.current.innerHTML);
+    // Sửa lỗi tự ngắt: Dùng requestAnimationFrame để cho phép DOM cập nhật xong
+    requestAnimationFrame(() => {
+        if (contentRef.current) {
+             setEditHtml(contentRef.current.innerHTML);
+        }
+    });
   };
   
   // Lấy ra HTML ban đầu khi bắt đầu chỉnh sửa
@@ -1247,20 +1247,17 @@ function NotesPanel({ userId }) {
     }
     
     if (command === 'insertUnorderedList') {
-        // Fix lỗi Bullet point không hoạt động
-        document.execCommand('insertHTML', false, '<ul><li>• &nbsp;</li></ul>');
-    } else if (command === 'formatBlock' && value === '<h2>') {
-        // Thêm tiêu đề H2
-        document.execCommand('formatBlock', false, '<h2>');
-        document.execCommand('bold', false, null); // Giữ cho nó đậm
+        document.execCommand('insertHTML', false, '<li> &nbsp;</li>');
     } else {
-        // Các lệnh B, I, U
         document.execCommand(command, false, value);
     }
     
-    // Cập nhật lại HTML sau khi lệnh được thực thi
-    // [FIX] Chỉ cần gọi handleNoteChange để update state (vì ContentEditable đã trigger)
-    setNewNoteHtml(contentRef.current.innerHTML); 
+    // Sửa lỗi ngắt note: Sau khi lệnh được thực thi, dùng requestAnimationFrame để đồng bộ state
+    requestAnimationFrame(() => {
+        if (contentRef.current) {
+             setNewNoteHtml(contentRef.current.innerHTML);
+        }
+    });
   };
 
   const handleSaveNote = async (e) => {

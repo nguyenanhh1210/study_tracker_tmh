@@ -6,7 +6,6 @@ export default {
   ],
   theme: {
     extend: {
-      // THÊM FONT MỚI
       fontFamily: {
         quicksand: ['Quicksand', 'sans-serif'],
       },

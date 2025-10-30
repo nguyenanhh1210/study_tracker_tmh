@@ -1,9 +1,7 @@
 import React from 'react'
 import ReactDOM from 'react-dom/client'
-// Sử dụng đường dẫn tuyệt đối (absolute path)
-// để trình biên dịch hiểu
-import App from '/src/App.jsx' 
-import '/src/index.css'     // Đường dẫn chuẩn
+import App from './App.jsx'       // <-- Dùng đường dẫn chuẩn
+import './index.css'     // <-- Dùng đường dẫn chuẩn
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>

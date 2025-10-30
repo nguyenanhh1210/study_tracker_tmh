@@ -384,7 +384,7 @@ function GoalItem({ goal, userId, onGoalTodoComplete }) {
                           <Circle size={20} className="text-red-500" />
                         )}
                       </button>
-                      <span className={`flex-grow text-sm ${todo.completed ? 'text-gray-500 line-through' : 'text-gray-900'}`}>
+                      <span className={`grow text-sm ${todo.completed ? 'text-gray-500 line-through' : 'text-gray-900'}`}>
                         {todo.task}
                       </span>
                     </li>
@@ -404,7 +404,7 @@ function GoalItem({ goal, userId, onGoalTodoComplete }) {
                 type="text"
                 value={newTask}
                 onChange={(e) => setNewTask(e.target.value)}
-                className="flex-grow px-3 py-1.5 border border-gray-300 rounded-l-md shadow-sm text-sm focus:outline-none focus:ring-1 focus:ring-red-400"
+                className="grow px-3 py-1.5 border border-gray-300 rounded-l-md shadow-sm text-sm focus:outline-none focus:ring-1 focus:ring-red-400"
                 placeholder="Add new sub-task..."
               />
               <button
@@ -794,11 +794,11 @@ function ReportModal({ userId, onClose }) {
           </button>
         </div>
         {isLoading ? (
-          <div className="flex-grow flex items-center justify-center">
+          <div className="grow flex items-center justify-center">
             <Loader2 size={48} className="animate-spin text-blue-600" />
           </div>
         ) : (
-          <div className="flex-grow">
+          <div className="grow">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart
                 data={data}

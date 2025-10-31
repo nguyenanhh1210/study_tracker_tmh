@@ -67,7 +67,8 @@ import {
   Clock, // Countdown
   MessageSquare, // Reflection
   Notebook, // Ghi chú
-  History // Recent History
+  History, // Recent History
+  Award // Thành tích
 } from 'lucide-react';
 import ContentEditable from 'react-contenteditable/lib/react-contenteditable.js'; // <-- SỬA LỖI BẰNG CÁCH CHỈ RÕ ĐƯỜNG DẪN
 
@@ -773,9 +774,8 @@ function GoalCompletionModal({ goal, onClose, onConfirm }) {
 /**
  * Goals Panel (V3.0)
  */
-function GoalsPanel({ userId, onGoalTodoComplete, onGoalAchieved }) {
+function GoalsPanel({ userId, onGoalTodoComplete, onGoalAchieved, onViewArchived }) {
   const [goals, setGoals] = useState([]);
-  const [showArchived, setShowArchived] = useState(false);
 
   const goalsQuery = useMemo(() => {
     return query(
@@ -801,7 +801,7 @@ function GoalsPanel({ userId, onGoalTodoComplete, onGoalAchieved }) {
   }, [goalsQuery]);
   
   const activeGoals = goals.filter(g => !g.completed);
-  const archivedGoals = goals.filter(g => g.completed);
+  const archivedGoalsCount = goals.filter(g => g.completed).length;
 
   return (
     <div className="bg-white p-6 rounded-lg shadow-xl h-full">
@@ -828,47 +828,33 @@ function GoalsPanel({ userId, onGoalTodoComplete, onGoalAchieved }) {
           <p className="text-center text-gray-500 italic py-4">You have no active goals. Add one above!</p>
         )}
         
-        <div className="pt-4">
-          <button
-            onClick={() => setShowArchived(!showArchived)}
-            className="text-sm font-medium text-gray-600 hover:text-blue-600 flex items-center"
+        {/* NÚT MỚI: HIỂN THỊ ARCHIVED GOALS DẠNG BUTTON NỔI */}
+        <div className="pt-4 border-t border-gray-100">
+           <button
+            onClick={onViewArchived} // <-- GỌI MODAL TỪ APP.JSX
+            className="w-full bg-gray-200 text-gray-700 py-2 px-4 rounded-md font-semibold shadow-md hover:bg-gray-300 transition duration-300 flex items-center justify-center"
           >
-            {showArchived ? <EyeOff size={16} className="mr-1" /> : <Eye size={16} className="mr-1" />}
-            {showArchived ? 'Hide' : 'Show'} Archived Goals ({archivedGoals.length})
+            <Archive size={16} className="mr-2" /> View Archived Goals ({archivedGoalsCount})
           </button>
-          
-          {showArchived && (
-            <div className="space-y-4 mt-4">
-              {archivedGoals.length > 0 ? (
-                 archivedGoals.map(goal => (
-                  <GoalItem 
-                    key={goal.id} 
-                    goal={goal} 
-                    userId={userId}
-                    onGoalTodoComplete={onGoalTodoComplete}
-                    onGoalAchieved={onGoalAchieved}
-                  />
-                ))
-              ) : (
-                 <p className="text-center text-gray-500 italic py-4">No archived goals yet.</p>
-              )}
-            </div>
-          )}
         </div>
       </div>
+      
+      {/* ĐÃ XÓA TOÀN BỘ PHẦN HIỂN THỊ ARCHIVED GOALS INLINE CŨ */}
     </div>
   );
 }
+        
 
 /**
  * V3.0: VIẾT LẠI HOÀN TOÀN Study Logger Panel (Bấm giờ)
  */
-function StudyLoggerPanel({ userId, onStudyLogged }) {
+function StudyLoggerPanel({ userId, onStudyLogged, onViewHistory }) { // <-- ĐÃ THÊM onViewHistory
   const [time, setTime] = useState(0);
   const [isRunning, setIsRunning] = useState(false);
   const [error, setError] = useState('');
-  const [logs, setLogs] = useState([]);
+  const [logs, setLogs] = useState([]); // Giữ logs để tính MINIMUM_LOG_SECONDS
   const [isLoading, setIsLoading] = useState(false);
+  // Loại bỏ showHistory state
 
   const timerRef = useRef(null);
   const startTimeRef = useRef(0);
@@ -879,11 +865,12 @@ function StudyLoggerPanel({ userId, onStudyLogged }) {
        collection(db, studyLogsPath),
        where('userId', '==', userId),
        orderBy("createdAt", "desc"),
-       limit(5) // <-- LỖI LÀ Ở ĐÂY, NHƯNG GIỜ ĐÃ IMPORT "limit"
+       limit(5)
      );
    }, [userId]);
 
   useEffect(() => {
+    // Chỉ lắng nghe logs, không cần show ra ở đây nữa
     const unsubscribe = onSnapshot(studyLogsQuery, (snapshot) => {
       const fetchedLogs = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
       setLogs(fetchedLogs);
@@ -978,7 +965,7 @@ function StudyLoggerPanel({ userId, onStudyLogged }) {
   };
 
   return (
-    <div className="bg-white p-6 rounded-lg shadow-xl h-full flex flex-col">
+    <div className="bg-white p-6 rounded-lg shadow-xl">
       <h2 className="text-3xl font-bold text-gray-800 mb-2 flex items-center">
         <BookOpen size={28} className="mr-2 text-study" />
         Study Timer
@@ -1020,34 +1007,90 @@ function StudyLoggerPanel({ userId, onStudyLogged }) {
         >
           {isLoading ? <Loader2 className="animate-spin" /> : 'Log & Reset Session (Min 15min)'}
         </button>
+        
+        {/* NÚT MỚI: HIỂN THỊ LỊCH SỬ DẠNG BUTTON NỔI */}
+        <button
+          onClick={onViewHistory}
+          className="w-full mt-3 bg-gray-200 text-gray-700 py-2 px-4 rounded-md font-semibold shadow-md hover:bg-gray-300 transition duration-300 flex items-center justify-center"
+        >
+          <History size={16} className="mr-2" /> View Full History
+        </button>
       </div>
       
-      <div className="bg-history p-4 rounded-lg shadow-inner mt-6 grow">
-        <h3 className="text-lg font-semibold text-gray-800 mb-3 border-b border-gray-300 pb-2 flex items-center">
-          <History size={18} className="mr-2" /> Recent History
-        </h3>
-        {logs.length > 0 ? (
-          <ul className="space-y-3">
-            {logs.map(log => (
-              <li key={log.id} className="flex items-center justify-between p-3 bg-white/70 rounded-md shadow-sm">
-                <div>
-                  <p className="font-semibold text-gray-900">
-                    {log.hours}h {log.minutes}m
-                    <span className="ml-2 text-green-700 font-bold">(+{log.points} pts)</span>
-                  </p>
-                  <p className="text-sm text-gray-600">{getDisplayDate(log.createdAt)}</p>
-                </div>
-              </li>
-            ))}
-          </ul>
+      {/* ĐÃ LOẠI BỎ PHẦN HISTORY DÀI XUỐNG DƯỚI */}
+    </div>
+  );
+}
+/**
+ * (MỚI) Modal Hiển thị Lịch sử Học tập Chi tiết
+ */
+function StudyHistoryModal({ userId, onClose }) {
+  const [allLogs, setAllLogs] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
+  
+  // Tải TẤT CẢ logs (không giới hạn)
+  useEffect(() => {
+    const fetchAllLogs = async () => {
+      setIsLoading(true);
+      try {
+        const q = query(
+          collection(db, studyLogsPath),
+          where("userId", "==", userId),
+          orderBy("createdAt", "desc")
+        );
+        const querySnapshot = await getDocs(q);
+        const fetchedLogs = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        setAllLogs(fetchedLogs);
+      } catch (error) {
+        console.error("Error fetching all study logs: ", error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    fetchAllLogs();
+  }, [userId]);
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-50 p-4 font-quicksand">
+      <div className="bg-white p-6 rounded-lg shadow-2xl w-full max-w-lg h-3/4 flex flex-col">
+        <div className="flex justify-between items-center mb-4 border-b pb-2">
+          <h2 className="text-2xl font-bold text-gray-800 flex items-center">
+            <History size={24} className="mr-2 text-study" />
+            Full Study History
+          </h2>
+          <button onClick={onClose} className="text-gray-500 hover:text-gray-800">
+            <X size={24} />
+          </button>
+        </div>
+        
+        {isLoading ? (
+          <div className="flex justify-center py-8">
+            <Loader2 size={32} className="animate-spin text-blue-600" />
+          </div>
         ) : (
-          <p className="text-center text-gray-600 italic py-4">No study sessions logged yet.</p>
+          <div className="overflow-y-auto space-y-3 pr-2">
+            {allLogs.length > 0 ? (
+              allLogs.map(log => (
+                <div key={log.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-md shadow-sm border-l-4 border-study">
+                  <div>
+                    <p className="font-semibold text-gray-900">
+                      {log.hours}h {log.minutes}m
+                      <span className="ml-2 text-green-700 font-bold">(+{log.points} pts)</span>
+                    </p>
+                    <p className="text-sm text-gray-600">{getDisplayDate(log.createdAt)}</p>
+                  </div>
+                  <span className="text-sm text-gray-500">{log.date}</span>
+                </div>
+              ))
+            ) : (
+              <p className="text-center text-gray-600 italic py-8">No study sessions logged yet.</p>
+            )}
+          </div>
         )}
       </div>
     </div>
   );
 }
-
 // --- (MỚI) Component Thanh Công Cụ (Toolbar) ---
 // Component này chứa các nút (B, I, U, Bullet, Header)
 function NotesToolbar({ onCommand }) {
@@ -1294,7 +1337,7 @@ function NotesPanel({ userId }) {
   };
 
   return (
-    <div className="bg-white p-6 rounded-lg shadow-xl h-full flex flex-col">
+    <div className="bg-white p-6 rounded-lg shadow-xl">
       <h2 className="text-3xl font-bold text-gray-800 mb-4 flex items-center">
         <Notebook size={28} className="mr-2 text-yellow-600" />
         My Notes
@@ -1336,6 +1379,78 @@ function NotesPanel({ userId }) {
             onDelete={handleDeleteNote}
           />
         ))}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * (MỚI) Modal Hiển thị Mục tiêu đã hoàn thành (Archived Goals)
+ */
+function ArchivedGoalsModal({ userId, onClose }) {
+  const [allArchivedGoals, setAllArchivedGoals] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
+  
+  // Tải TẤT CẢ mục tiêu đã hoàn thành (Tương tự StudyHistoryModal)
+  useEffect(() => {
+    const fetchArchivedGoals = async () => {
+      setIsLoading(true);
+      try {
+        const q = query(
+          collection(db, goalsPath),
+          where("userId", "==", userId),
+          orderBy("endDate", "desc")
+        );
+        const querySnapshot = await getDocs(q);
+        const fetchedGoals = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+
+        // BỘ LỌC JAVASCRIPT: Lọc ra các mục tiêu có completed là truthy
+        // Logic này tương đương với logic đếm archivedGoalsCount, nên nó sẽ tìm thấy 9 mục tiêu của bạn
+        const archivedGoals = fetchedGoals.filter(g => g.completed); 
+        
+        setAllArchivedGoals(archivedGoals); 
+      } catch (error) {
+        console.error("Error fetching archived goals: ", error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    fetchArchivedGoals();
+  }, [userId]);
+
+  return (
+    // Dùng layout Modal cố định (fixed inset-0)
+    <div className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-50 p-4 font-quicksand">
+      <div className="bg-white p-6 rounded-lg shadow-2xl w-full max-w-lg h-3/4 flex flex-col">
+        <div className="flex justify-between items-center mb-4 border-b pb-2">
+          <h2 className="text-2xl font-bold text-gray-800 flex items-center">
+            <Archive size={24} className="mr-2 text-gray-600" />
+            Archived Goals History
+          </h2>
+          <button onClick={onClose} className="text-gray-500 hover:text-gray-800">
+            <X size={24} />
+          </button>
+        </div>
+
+        {isLoading ? (
+          <div className="flex justify-center py-8">
+            <Loader2 size={32} className="animate-spin text-gray-600" />
+          </div>
+        ) : (
+          <div className="overflow-y-auto space-y-3 pr-2">
+            {allArchivedGoals.length > 0 ? (
+              allArchivedGoals.map(goal => (
+                <div key={goal.id} className="p-3 bg-gray-100 rounded-md shadow-sm border-l-4 border-gray-400">
+                  <h4 className="font-bold text-gray-800">{goal.title}</h4>
+                  <p className="text-sm text-gray-600">Achieved on: {getDisplayDate(goal.createdAt)}</p>
+                  {goal.reflection && <p className="text-xs italic mt-1">Reflection: "{goal.reflection}"</p>}
+                </div>
+              ))
+            ) : (
+              <p className="text-center text-gray-600 italic py-8">No goals have been archived yet.</p>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );
@@ -1430,7 +1545,91 @@ function ReportModal({ userId, onClose }) {
     </div>
   );
 }
+// --- (MỚI) Component Bảng Vàng (Leaderboard) ---
+function LeaderboardPanel() {
+  const [leaderboard, setLeaderboard] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
 
+  // Truy vấn 10 người dùng (users) có điểm cao nhất.
+  const leaderboardQuery = useMemo(() => {
+    return query(
+      collection(db, usersPath),
+      orderBy('points', 'desc'),
+      limit(10)
+    );
+  }, []);
+
+  useEffect(() => {
+    const unsubscribe = onSnapshot(leaderboardQuery, (snapshot) => {
+      const fetchedUsers = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      setLeaderboard(fetchedUsers);
+      setIsLoading(false);
+    }, (error) => {
+      console.error("Leaderboard listener error: ", error);
+      setIsLoading(false);
+    });
+    return () => unsubscribe();
+  }, [leaderboardQuery]);
+
+  return (
+    <div className="bg-white p-6 rounded-lg shadow-xl h-full flex flex-col">
+      <h2 className="text-3xl font-bold text-gray-800 mb-6 flex items-center">
+        <Award size={28} className="mr-2 text-yellow-500" />
+        Top 10 Best Students
+      </h2>
+      
+      <p className="text-sm text-gray-600 mb-4">Ranked by Total Points</p>
+
+      {isLoading && (
+        <div className="flex justify-center py-8">
+          <Loader2 size={32} className="animate-spin text-yellow-500" />
+        </div>
+      )}
+      
+      {!isLoading && leaderboard.length > 0 && (
+        <ul className="space-y-3">
+          {leaderboard.map((user, index) => {
+            const rank = index + 1;
+            let rankClass = 'text-gray-700';
+            let icon = null;
+
+            if (rank === 1) {
+              rankClass = 'text-yellow-600 font-extrabold text-lg';
+              icon = <Award size={20} className="text-yellow-500 fill-yellow-300 mr-2" />;
+            } else if (rank <= 3) {
+              rankClass = 'text-green-600 font-bold';
+            }
+            
+            // Highlight user if logged in
+            const isCurrentUser = user.userId === auth.currentUser?.uid;
+
+            return (
+              <li 
+                key={user.id} 
+                className={`flex items-center justify-between p-3 rounded-xl shadow-md transition-all duration-300 ${isCurrentUser ? 'bg-blue-100 border-2 border-blue-500 scale-105' : 'bg-gray-50 hover:bg-yellow-50'}`}
+              >
+                <div className="flex items-center">
+                  <span className={`w-8 text-center mr-3 ${rankClass}`}>
+                    {icon || `#${rank}`}
+                  </span>
+                  <span className={`font-semibold ${rankClass} ${isCurrentUser ? 'text-blue-700' : 'text-gray-900'}`}>
+                    {user.name} {isCurrentUser && "(You)"}
+                  </span>
+                </div>
+                <span className={`text-xl font-bold ${isCurrentUser ? 'text-blue-600' : 'text-gray-800'}`}>
+                  {user.points} pts
+                </span>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+       {!isLoading && leaderboard.length === 0 && (
+          <p className="text-center text-gray-500 italic py-8">No data found on the leaderboard.</p>
+      )}
+    </div>
+  );
+}
 
 /**
  * Main App Component (V4.2 - Final)
@@ -1443,6 +1642,8 @@ export default function App() {
   const [isLoading, setIsLoading] = useState(true);
   const [showReport, setShowReport] = useState(false);
   const [showCodeModal, setShowCodeModal] = useState(false);
+  const [showHistoryModal, setShowHistoryModal] = useState(false);
+  const [showArchivedModal, setShowArchivedModal] = useState(false);
   
   const [newGoalTitle, setNewGoalTitle] = useState('');
   const [newGoalDate, setNewGoalDate] = useState(getISODate());
@@ -1698,22 +1899,33 @@ export default function App() {
           </form>
         </div>
 
-        {/* --- V3.0: BỐ CỤC MỚI (3 CỘT NỘI DUNG) --- */}
-        <main className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          <div className="lg:col-span-1">
+        {/* --- V7.0: BỐ CỤC THEO TỈ LỆ 2:3:3 (TỔNG 8 CỘT) --- */}
+        <main className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-8 gap-8">
+          
+          {/* Cột 1 (2/8): LEADERBOARD */}
+          <div className="lg:col-span-2"> 
+            <LeaderboardPanel />
+          </div>
+          
+          {/* Cột 2 (3/8): ACTIVE GOALS (Cột trọng tâm) */}
+          <div className="lg:col-span-3"> 
             <GoalsPanel 
               userId={userId} 
               onGoalTodoComplete={handlePointUpdate}
               onGoalAchieved={(goal) => setGoalToComplete(goal)}
+              onViewArchived={() => setShowArchivedModal(true)}
             />
           </div>
-          <div className="lg:col-span-1">
+          
+          {/* Cột 3 (3/8): TIMER + NOTES (GOM CHUNG 1 CỘT DỌC) */}
+          <div className="lg:col-span-3 space-y-8"> 
+            {/* 1. Study Timer (Trình hẹn giờ) */}
             <StudyLoggerPanel 
               userId={userId} 
               onStudyLogged={handlePointUpdate}
+              onViewHistory={() => setShowHistoryModal(true)}
             />
-          </div>
-          <div className="lg:col-span-1">
+            {/* 2. My Notes (Nằm ngay dưới Timer, cách 32px nhờ space-y-8) */}
             <NotesPanel 
               userId={userId} 
             />
@@ -1732,7 +1944,21 @@ export default function App() {
             onConfirm={handleConfirmGoalCompletion}
           />
         )}
-        
+
+        {showHistoryModal && ( // <-- THÊM DÒNG NÀY
+          <StudyHistoryModal
+            userId={userId}
+            onClose={() => setShowHistoryModal(false)}
+          />
+        )}
+
+        {showArchivedModal && ( // <-- THÊM MODAL NÀY
+          <ArchivedGoalsModal
+            userId={userId}
+            onClose={() => setShowArchivedModal(false)}
+          />
+        )}
+
         {showCodeModal && (
           <div className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-50 p-4 font-quicksand">
             <div className="bg-white p-8 rounded-lg shadow-2xl max-w-sm w-full text-center">

@@ -74,13 +74,13 @@ import ContentEditable from 'react-contenteditable/lib/react-contenteditable.js'
 
 // --- CẤU HÌNH FIREBASE ---
 const firebaseConfig = {
-  apiKey: "AIzaSyBuSPwtyntSMlT3NwWXn3Ws2OOKZR8j79A",
-  authDomain: "database-of-tmh.firebaseapp.com",
-  projectId: "database-of-tmh",
-  storageBucket: "database-of-tmh.firebasestorage.app",
-  messagingSenderId: "805432088197",
-  appId: "1:805432088197:web:914c8e22d8968f8a333bec",
-  measurementId: "G-42E8MR1KPC"
+  apiKey: "AIzaSyDFPZdVeL5D2j2D-wuVQcx1AWdOJO7qFL0",
+  authDomain: "rizenly.firebaseapp.com",
+  projectId: "rizenly",
+  storageBucket: "rizenly.firebasestorage.app",
+  messagingSenderId: "928816084780",
+  appId: "1:928816084780:web:9eec77edf402d6e3c45e89",
+  measurementId: "G-FFPXEVRY9J"
 };
 
 // Khởi tạo Firebase
@@ -804,7 +804,7 @@ function GoalsPanel({ userId, onGoalTodoComplete, onGoalAchieved, onViewArchived
   const archivedGoalsCount = goals.filter(g => g.completed).length;
 
   return (
-    <div className="bg-white p-6 rounded-lg shadow-xl h-full">
+    <div className="bg-white p-6 rounded-lg shadow-xl h-full flex flex-col">
       <h2 className="text-3xl font-bold text-gray-800 mb-6 flex items-center">
         <Target size={28} className="mr-2 text-goal" />
         My Goals
@@ -965,7 +965,7 @@ function StudyLoggerPanel({ userId, onStudyLogged, onViewHistory }) { // <-- Đ�
   };
 
   return (
-    <div className="bg-white p-6 rounded-lg shadow-xl">
+    <div className="bg-white p-6 rounded-lg shadow-xl h-full">
       <h2 className="text-3xl font-bold text-gray-800 mb-2 flex items-center">
         <BookOpen size={28} className="mr-2 text-study" />
         Study Timer
@@ -1399,6 +1399,7 @@ function ArchivedGoalsModal({ userId, onClose }) {
         const q = query(
           collection(db, goalsPath),
           where("userId", "==", userId),
+          where("completed", "==", true),
           orderBy("endDate", "desc")
         );
         const querySnapshot = await getDocs(q);
@@ -1555,7 +1556,7 @@ function LeaderboardPanel() {
     return query(
       collection(db, usersPath),
       orderBy('points', 'desc'),
-      limit(10)
+      limit(5)
     );
   }, []);
 
@@ -1575,7 +1576,7 @@ function LeaderboardPanel() {
     <div className="bg-white p-6 rounded-lg shadow-xl h-full flex flex-col">
       <h2 className="text-3xl font-bold text-gray-800 mb-6 flex items-center">
         <Award size={28} className="mr-2 text-yellow-500" />
-        Top 10 Best Students
+        Top 05 Best Students
       </h2>
       
       <p className="text-sm text-gray-600 mb-4">Ranked by Total Points</p>
@@ -1919,13 +1920,14 @@ export default function App() {
           
           {/* Cột 3 (3/8): TIMER + NOTES (GOM CHUNG 1 CỘT DỌC) */}
           <div className="lg:col-span-3 space-y-8"> 
-            {/* 1. Study Timer (Trình hẹn giờ) */}
             <StudyLoggerPanel 
               userId={userId} 
               onStudyLogged={handlePointUpdate}
               onViewHistory={() => setShowHistoryModal(true)}
             />
-            {/* 2. My Notes (Nằm ngay dưới Timer, cách 32px nhờ space-y-8) */}
+          </div>
+          
+            <div className="lg:col-span-8"> 
             <NotesPanel 
               userId={userId} 
             />
